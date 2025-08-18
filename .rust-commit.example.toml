@@ -1,0 +1,11 @@
+[ai]
+provider = "openai"  # 或 "anthropic"
+model = "gpt-4"
+api_key_env = "OPENAI_API_KEY"
+# api_key = "your-api-key-here"  # 不建议直接在配置文件中写 API key
+
+[commit]
+format = "conventional"  # commit message 格式
+include_emoji = false     # 是否在 commit message 中包含 emoji
+max_diff_size = 4000      # diff 最大字符数
+auto_stage = false        # 是否自动暂存所有更改
