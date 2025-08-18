@@ -61,6 +61,23 @@ cargo build --release
 ./target/release/rust-commit
 ```
 
+## 快速开始
+
+```bash
+# 初始化配置文件（推荐）
+rust-commit init
+
+# 或在当前项目创建配置
+rust-commit init --local
+
+# 设置 API Key
+export OPENAI_API_KEY="your-api-key"
+
+# 使用工具
+rust-commit                    # 查看状态
+rust-commit commit              # 生成 AI commit message
+```
+
 ## 配置
 
 创建配置文件 `.rust-commit.toml`：

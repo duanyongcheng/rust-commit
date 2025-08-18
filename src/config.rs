@@ -73,6 +73,15 @@ impl Config {
     
     pub fn save(&self, path: Option<PathBuf>) -> Result<()> {
         let path = path.unwrap_or_else(|| PathBuf::from(".rust-commit.toml"));
+        
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory {:?}", parent))?;
+            }
+        }
+        
         let content = toml::to_string_pretty(self)
             .context("Failed to serialize config")?;
         fs::write(&path, content)
@@ -88,6 +97,76 @@ impl Config {
         
         // Then check environment variable
         std::env::var(&self.ai.api_key_env).ok()
+    }
+    
+    pub fn init(local: bool, force: bool) -> Result<PathBuf> {
+        let path = if local {
+            PathBuf::from(".rust-commit.toml")
+        } else {
+            // Try to use ~/.config/rust-commit/config.toml first
+            dirs::config_dir()
+                .map(|p| p.join("rust-commit/config.toml"))
+                .or_else(|| dirs::home_dir().map(|p| p.join(".rust-commit.toml")))
+                .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?
+        };
+        
+        // Check if file already exists
+        if path.exists() && !force {
+            anyhow::bail!(
+                "Config file already exists at {:?}. Use --force to overwrite.",
+                path
+            );
+        }
+        
+        // Create default config with helpful comments
+        let config_content = r#"# Rust Commit Configuration File
+# This file configures the rust-commit tool for AI-powered commit message generation
+
+[ai]
+# AI provider: "openai" or "anthropic"
+provider = "openai"
+
+# Model to use for generation
+# OpenAI: "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"
+# Anthropic: "claude-3-opus", "claude-3-sonnet", "claude-3-haiku"
+model = "gpt-4"
+
+# Environment variable containing the API key
+# For OpenAI: typically "OPENAI_API_KEY"
+# For Anthropic: typically "ANTHROPIC_API_KEY"
+api_key_env = "OPENAI_API_KEY"
+
+# Direct API key (not recommended for security reasons)
+# Uncomment and set your API key here if you prefer not to use environment variables
+# api_key = "your-api-key-here"
+
+[commit]
+# Commit message format: "conventional" (follows Conventional Commits spec)
+format = "conventional"
+
+# Whether to include emoji in commit messages
+include_emoji = false
+
+# Maximum diff size in characters to send to AI
+max_diff_size = 4000
+
+# Whether to automatically stage all changes before committing
+auto_stage = false
+"#;
+        
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory {:?}", parent))?;
+            }
+        }
+        
+        // Write config file
+        fs::write(&path, config_content)
+            .context(format!("Failed to write config to {:?}", path))?;
+        
+        Ok(path)
     }
     
     pub fn create_example() -> Result<()> {

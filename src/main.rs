@@ -20,6 +20,11 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     let path = args.path.unwrap_or_else(|| env::current_dir().unwrap());
     
+    // Handle init command first (doesn't need git repo)
+    if let Some(Commands::Init { local, force }) = &args.command {
+        return handle_init_command(*local, *force);
+    }
+    
     // Check if it's a git repository
     let repo = match GitRepo::open(&path) {
         Ok(repo) => repo,
@@ -44,9 +49,39 @@ async fn main() -> Result<()> {
         Some(Commands::Status) | None => {
             handle_status_command(repo, args.verbose)?;
         }
+        Some(Commands::Init { .. }) => {
+            // Already handled above
+            unreachable!()
+        }
     }
     
     Ok(())
+}
+
+fn handle_init_command(local: bool, force: bool) -> Result<()> {
+    match Config::init(local, force) {
+        Ok(path) => {
+            println!("{} Configuration file created at: {}", 
+                     "✓".green().bold(), 
+                     path.display());
+            println!();
+            println!("{}", "Next steps:".bold());
+            println!("  1. Edit the config file to set your API provider and model");
+            println!("  2. Set your API key either:");
+            println!("     - In the environment variable (recommended)");
+            println!("     - Directly in the config file (not recommended)");
+            println!();
+            println!("  Example:");
+            println!("  export OPENAI_API_KEY=\"your-api-key\"");
+            println!("  # or");
+            println!("  export ANTHROPIC_API_KEY=\"your-api-key\"");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("{} {}", "Error:".red().bold(), e);
+            Err(e)
+        }
+    }
 }
 
 fn handle_status_command(repo: GitRepo, verbose: bool) -> Result<()> {

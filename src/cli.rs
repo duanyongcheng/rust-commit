@@ -39,4 +39,13 @@ pub enum Commands {
         #[arg(long, help = "Show staged changes only")]
         staged: bool,
     },
+    
+    /// Initialize configuration file
+    Init {
+        #[arg(long, help = "Create config in current directory instead of home")]
+        local: bool,
+        
+        #[arg(long, help = "Force overwrite existing config")]
+        force: bool,
+    },
 }
