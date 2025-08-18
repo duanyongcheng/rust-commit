@@ -83,10 +83,6 @@ impl CommitUI {
         Ok(input.trim().to_string())
     }
     
-    pub fn show_error(error: &str) {
-        eprintln!("{} {}", "Error:".red().bold(), error);
-    }
-    
     pub fn show_success(message: &str) {
         println!("{} {}", "✓".green().bold(), message.green());
     }

@@ -15,6 +15,7 @@ pub struct AIConfig {
     pub model: String,
     pub api_key_env: String,
     pub api_key: Option<String>,
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -33,6 +34,7 @@ impl Default for Config {
                 model: "gpt-4".to_string(),
                 api_key_env: "OPENAI_API_KEY".to_string(),
                 api_key: None,
+                base_url: None,
             },
             commit: CommitConfig {
                 format: "conventional".to_string(),
@@ -49,8 +51,8 @@ impl Config {
         // Try to load from multiple locations
         let config_paths = vec![
             PathBuf::from(".rust-commit.toml"),
-            dirs::config_dir()
-                .map(|p| p.join("rust-commit/config.toml"))
+            dirs::home_dir()
+                .map(|p| p.join(".config/rust-commit/config.toml"))
                 .unwrap_or_default(),
             dirs::home_dir()
                 .map(|p| p.join(".rust-commit.toml"))
@@ -71,24 +73,6 @@ impl Config {
         Ok(Self::default())
     }
     
-    pub fn save(&self, path: Option<PathBuf>) -> Result<()> {
-        let path = path.unwrap_or_else(|| PathBuf::from(".rust-commit.toml"));
-        
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .context(format!("Failed to create directory {:?}", parent))?;
-            }
-        }
-        
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize config")?;
-        fs::write(&path, content)
-            .context(format!("Failed to write config to {:?}", path))?;
-        Ok(())
-    }
-    
     pub fn get_api_key(&self) -> Option<String> {
         // First check if api_key is directly set
         if let Some(key) = &self.ai.api_key {
@@ -103,10 +87,9 @@ impl Config {
         let path = if local {
             PathBuf::from(".rust-commit.toml")
         } else {
-            // Try to use ~/.config/rust-commit/config.toml first
-            dirs::config_dir()
-                .map(|p| p.join("rust-commit/config.toml"))
-                .or_else(|| dirs::home_dir().map(|p| p.join(".rust-commit.toml")))
+            // Use ~/.config/rust-commit/config.toml
+            dirs::home_dir()
+                .map(|p| p.join(".config/rust-commit/config.toml"))
                 .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?
         };
         
@@ -140,6 +123,15 @@ api_key_env = "OPENAI_API_KEY"
 # Uncomment and set your API key here if you prefer not to use environment variables
 # api_key = "your-api-key-here"
 
+# Custom API endpoint (optional - uncomment and modify if using a proxy or alternative API)
+# For OpenAI-compatible APIs (e.g., Azure OpenAI, local LLMs, proxies):
+# base_url = "https://api.openai.com/v1"
+# For Anthropic-compatible APIs:
+# base_url = "https://api.anthropic.com"
+# Examples:
+# base_url = "https://your-proxy.com/v1"  # For API proxies
+# base_url = "http://localhost:8080/v1"   # For local LLMs
+
 [commit]
 # Commit message format: "conventional" (follows Conventional Commits spec)
 format = "conventional"
@@ -167,24 +159,5 @@ auto_stage = false
             .context(format!("Failed to write config to {:?}", path))?;
         
         Ok(path)
-    }
-    
-    pub fn create_example() -> Result<()> {
-        let example = Config::default();
-        let content = toml::to_string_pretty(&example)?;
-        let example_content = format!(
-            "# Rust Commit Configuration File\n\
-             # Place this file in your project root or home directory\n\n\
-             {}\n\n\
-             # You can also set the API key directly (not recommended):\n\
-             # [ai]\n\
-             # api_key = \"your-api-key-here\"\n",
-            content
-        );
-        
-        fs::write(".rust-commit.example.toml", example_content)
-            .context("Failed to create example config")?;
-        
-        Ok(())
     }
 }

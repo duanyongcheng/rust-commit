@@ -24,14 +24,20 @@ pub enum Commands {
         #[arg(long, help = "API key for AI service (or set OPENAI_API_KEY env var)")]
         api_key: Option<String>,
         
-        #[arg(long, default_value = "gpt-4", help = "AI model to use")]
-        model: String,
+        #[arg(long, help = "AI model to use (overrides config)")]
+        model: Option<String>,
+        
+        #[arg(long, help = "Custom API base URL (e.g., https://api.openai.com/v1)")]
+        base_url: Option<String>,
         
         #[arg(long, help = "Auto-commit without confirmation")]
         auto: bool,
         
         #[arg(long, help = "Show diff in the prompt")]
         show_diff: bool,
+        
+        #[arg(long, help = "Debug mode - show AI raw response")]
+        debug: bool,
     },
     
     /// Show git diff

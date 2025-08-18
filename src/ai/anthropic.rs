@@ -1,23 +1,26 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use colored::*;
 use super::{CommitContext, CommitMessage, build_prompt};
 
 pub struct AnthropicClient {
     api_key: String,
     model: String,
+    base_url: String,
     client: reqwest::Client,
 }
 
 impl AnthropicClient {
-    pub fn new(api_key: String, model: String) -> Self {
+    pub fn new(api_key: String, model: String, base_url: Option<String>) -> Self {
         Self {
             api_key,
             model,
+            base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string()),
             client: reqwest::Client::new(),
         }
     }
     
-    pub async fn generate_commit_message(&self, diff: &str, context: &CommitContext) -> Result<CommitMessage> {
+    pub async fn generate_commit_message(&self, diff: &str, context: &CommitContext, debug: bool) -> Result<CommitMessage> {
         let prompt = build_prompt(diff, context);
         
         let request = AnthropicRequest {
@@ -35,7 +38,7 @@ impl AnthropicClient {
         };
         
         let response = self.client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
@@ -57,6 +60,12 @@ impl AnthropicClient {
             .ok_or_else(|| anyhow::anyhow!("No response from Anthropic"))?
             .text
             .clone();
+        
+        if debug {
+            println!("\n{}", "=== DEBUG: AI Raw Response ===".cyan().bold());
+            println!("{}", content);
+            println!("{}", "==============================\n".cyan().bold());
+        }
         
         // Extract JSON from the response (Anthropic might include extra text)
         let json_start = content.find('{').unwrap_or(0);

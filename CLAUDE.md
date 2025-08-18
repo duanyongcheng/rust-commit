@@ -39,7 +39,8 @@ cargo install --path .
 ### Core Modules
 
 1. **`src/main.rs`** - Entry point and command orchestration
-   - Handles command dispatch to `handle_status_command`, `handle_diff_command`, `handle_commit_command`
+   - Handles command dispatch to `handle_status_command`, `handle_diff_command`, `handle_commit_command`, `handle_init_command`
+   - Init command doesn't require git repository (handled before repo check)
    - Manages the overall flow and error handling
 
 2. **`src/git.rs`** - Git operations abstraction
@@ -55,8 +56,9 @@ cargo install --path .
 
 4. **`src/cli.rs`** - Command-line interface definition
    - Uses `clap` derive macros for argument parsing
-   - Defines `Commands` enum: Status, Commit, Diff
+   - Defines `Commands` enum: Status, Commit, Diff, Init
    - Commit command includes AI-specific flags (api_key, model, auto, show_diff)
+   - Init command includes --local and --force flags
 
 5. **`src/ui.rs`** - Interactive user interface
    - `CommitUI` provides methods for user interaction
@@ -67,6 +69,8 @@ cargo install --path .
    - Loads from `.rust-commit.toml` in multiple locations (current dir, ~/.config/, home)
    - `Config` struct with nested `AIConfig` and `CommitConfig`
    - API key resolution: config file → environment variable → interactive prompt
+   - `Config::init()` creates config file with detailed comments
+   - Auto-creates parent directories if needed
 
 ### AI Provider Implementation
 

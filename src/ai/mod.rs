@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub mod openai;
 pub mod anthropic;
@@ -14,29 +14,88 @@ pub struct CommitContext {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CommitMessage {
+    #[serde(alias = "type", alias = "commit_type")]
     pub commit_type: String,
     pub scope: Option<String>,
     pub description: String,
-    pub body: Option<String>,
+    #[serde(default)]
+    pub description_en: String,  // 英文描述
+    #[serde(deserialize_with = "deserialize_body", default)]
+    pub body: Option<Vec<String>>,  // 改为数组，每个元素是一条说明
+    #[serde(default)]
+    pub body_en: Option<Vec<String>>,  // 英文说明
+    #[serde(deserialize_with = "deserialize_breaking_change")]
     pub breaking_change: Option<String>,
+}
+
+fn deserialize_body<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Body {
+        String(String),
+        Array(Vec<String>),
+        Null,
+    }
+    
+    match Body::deserialize(deserializer) {
+        Ok(Body::String(s)) => Ok(Some(vec![s])),
+        Ok(Body::Array(arr)) => Ok(Some(arr)),
+        Ok(Body::Null) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+fn deserialize_breaking_change<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum BreakingChange {
+        Bool(bool),
+        String(String),
+        Null,
+    }
+    
+    match BreakingChange::deserialize(deserializer) {
+        Ok(BreakingChange::Bool(false)) | Ok(BreakingChange::Null) => Ok(None),
+        Ok(BreakingChange::Bool(true)) => Ok(Some("Breaking change".to_string())),
+        Ok(BreakingChange::String(s)) => Ok(Some(s)),
+        Err(e) => Err(e),
+    }
 }
 
 impl CommitMessage {
     pub fn format_conventional(&self) -> String {
         let mut message = String::new();
         
-        // Header: type(scope): description
+        // Header: type(scope): 中文描述
         message.push_str(&self.commit_type);
         if let Some(scope) = &self.scope {
             message.push_str(&format!("({})", scope));
         }
         message.push_str(": ");
         message.push_str(&self.description);
+        message.push_str("\n");
+        message.push_str(&self.description_en);
         
-        // Body
-        if let Some(body) = &self.body {
+        // Body - 双语格式
+        if let (Some(body_zh), Some(body_en)) = (&self.body, &self.body_en) {
             message.push_str("\n\n");
-            message.push_str(body);
+            for (i, (zh, en)) in body_zh.iter().zip(body_en.iter()).enumerate() {
+                if i > 0 {
+                    // 不是第一条，不需要额外空行
+                }
+                message.push_str(zh);
+                message.push_str("\n");
+                message.push_str(en);
+                if i < body_zh.len() - 1 {
+                    message.push_str("\n");
+                }
+            }
         }
         
         // Breaking change
@@ -48,10 +107,6 @@ impl CommitMessage {
         
         message
     }
-    
-    pub fn format_simple(&self) -> String {
-        self.description.clone()
-    }
 }
 
 pub enum AIClient {
@@ -60,25 +115,25 @@ pub enum AIClient {
 }
 
 impl AIClient {
-    pub async fn generate_commit_message(&self, diff: &str, context: &CommitContext) -> Result<CommitMessage> {
+    pub async fn generate_commit_message(&self, diff: &str, context: &CommitContext, debug: bool) -> Result<CommitMessage> {
         match self {
-            AIClient::OpenAI(client) => client.generate_commit_message(diff, context).await,
-            AIClient::Anthropic(client) => client.generate_commit_message(diff, context).await,
+            AIClient::OpenAI(client) => client.generate_commit_message(diff, context, debug).await,
+            AIClient::Anthropic(client) => client.generate_commit_message(diff, context, debug).await,
         }
     }
 }
 
-pub fn create_client(provider: &str, api_key: String, model: String) -> Result<AIClient> {
+pub fn create_client(provider: &str, api_key: String, model: String, base_url: Option<String>) -> Result<AIClient> {
     match provider.to_lowercase().as_str() {
-        "openai" => Ok(AIClient::OpenAI(openai::OpenAIClient::new(api_key, model))),
-        "anthropic" => Ok(AIClient::Anthropic(anthropic::AnthropicClient::new(api_key, model))),
+        "openai" => Ok(AIClient::OpenAI(openai::OpenAIClient::new(api_key, model, base_url))),
+        "anthropic" => Ok(AIClient::Anthropic(anthropic::AnthropicClient::new(api_key, model, base_url))),
         _ => anyhow::bail!("Unsupported AI provider: {}", provider),
     }
 }
 
 pub fn build_prompt(diff: &str, context: &CommitContext) -> String {
     format!(
-        r#"You are a Git commit message generator. Based on the following git diff, generate a structured commit message.
+        r#"You are a Git commit message generator. Based on the following git diff, generate a bilingual (Chinese and English) structured commit message.
 
 Context:
 - Branch: {}
@@ -91,14 +146,31 @@ Git Diff:
 {}
 ```
 
-Generate a commit message following the Conventional Commits specification:
+Generate a commit message following the Conventional Commits specification with bilingual format:
 - type: feat, fix, docs, style, refactor, test, chore, perf
 - scope: optional, the component or area affected
-- description: brief description (50 chars or less)
-- body: optional, detailed explanation
+- description: 中文简要描述（50字符以内）
+- description_en: English brief description (50 chars or less)
+- body: 中文详细说明数组，每个元素是一条说明（如："添加了用户认证功能"、"优化了数据库查询性能"）
+- body_en: English detailed explanation array, each element corresponds to Chinese version
 - breaking_change: optional, if there are breaking changes
 
-Respond with a JSON object containing these fields.
+Important requirements:
+1. description should be in Chinese, description_en should be its English translation
+2. body and body_en should be arrays of strings, each element is one point
+3. Each Chinese point in body should have a corresponding English translation in body_en
+4. Keep descriptions concise and clear
+
+Respond with a JSON object containing these fields. Example:
+{{
+    "type": "feat",
+    "scope": "auth",
+    "description": "添加用户认证功能",
+    "description_en": "Add user authentication feature",
+    "body": ["实现了JWT令牌验证", "添加了用户登录接口", "集成了OAuth2.0支持"],
+    "body_en": ["Implement JWT token validation", "Add user login endpoint", "Integrate OAuth2.0 support"],
+    "breaking_change": null
+}}
 "#,
         context.branch_name.as_deref().unwrap_or("unknown"),
         context.file_count,

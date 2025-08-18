@@ -40,8 +40,8 @@ async fn main() -> Result<()> {
     
     // Handle commands
     match args.command {
-        Some(Commands::Commit { api_key, model, auto, show_diff }) => {
-            handle_commit_command(repo, api_key, model, auto, show_diff).await?;
+        Some(Commands::Commit { api_key, model, base_url, auto, show_diff, debug }) => {
+            handle_commit_command(repo, api_key, model, base_url, auto, show_diff, debug).await?;
         }
         Some(Commands::Diff { staged }) => {
             handle_diff_command(repo, staged)?;
@@ -194,9 +194,11 @@ fn handle_diff_command(repo: GitRepo, staged: bool) -> Result<()> {
 async fn handle_commit_command(
     repo: GitRepo,
     api_key: Option<String>,
-    model: String,
+    model: Option<String>,
+    base_url: Option<String>,
     auto: bool,
     show_diff: bool,
+    debug: bool,
 ) -> Result<()> {
     // Load config
     let config = Config::load().unwrap_or_default();
@@ -245,12 +247,16 @@ async fn handle_commit_command(
     };
     
     // Create AI client
-    let client = ai::create_client(&config.ai.provider, api_key, model)?;
+    // Use model from CLI if provided, otherwise use config
+    let final_model = model.unwrap_or(config.ai.model.clone());
+    // Use base_url from CLI if provided, otherwise use config
+    let final_base_url = base_url.or(config.ai.base_url.clone());
+    let client = ai::create_client(&config.ai.provider, api_key, final_model, final_base_url)?;
     
     CommitUI::show_info("Generating commit message with AI...");
     
     // Generate commit message
-    let commit_message = client.generate_commit_message(&diff, &context).await?;
+    let commit_message = client.generate_commit_message(&diff, &context, debug).await?;
     
     // Handle user action
     let action = if auto {
