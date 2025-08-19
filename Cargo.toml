@@ -2,6 +2,12 @@
 name = "rust-commit"
 version = "0.1.0"
 edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+description = "An intelligent Git commit tool with AI-powered bilingual commit message generation"
+repository = "https://github.com/yourusername/rust-commit"
+keywords = ["git", "commit", "ai", "cli", "tool"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 git2 = "0.18"

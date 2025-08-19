@@ -67,10 +67,27 @@ impl AnthropicClient {
             println!("{}", "==============================\n".cyan().bold());
         }
         
+        // Strip markdown code block wrapper if present
+        let clean_content = if content.starts_with("```json") && content.ends_with("```") {
+            content
+                .strip_prefix("```json")
+                .and_then(|s| s.strip_suffix("```"))
+                .map(|s| s.trim())
+                .unwrap_or(&content)
+        } else if content.starts_with("```") && content.ends_with("```") {
+            content
+                .strip_prefix("```")
+                .and_then(|s| s.strip_suffix("```"))
+                .map(|s| s.trim())
+                .unwrap_or(&content)
+        } else {
+            &content
+        };
+        
         // Extract JSON from the response (Anthropic might include extra text)
-        let json_start = content.find('{').unwrap_or(0);
-        let json_end = content.rfind('}').map(|i| i + 1).unwrap_or(content.len());
-        let json_str = &content[json_start..json_end];
+        let json_start = clean_content.find('{').unwrap_or(0);
+        let json_end = clean_content.rfind('}').map(|i| i + 1).unwrap_or(clean_content.len());
+        let json_str = &clean_content[json_start..json_end];
         
         let commit_message: CommitMessage = serde_json::from_str(json_str)
             .context("Failed to parse commit message from Anthropic response")?;

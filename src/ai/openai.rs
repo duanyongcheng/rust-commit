@@ -88,7 +88,24 @@ impl OpenAIClient {
             println!("{}", "==================================\n".cyan().bold());
         }
 
-        let commit_message: CommitMessage = serde_json::from_str(&content)
+        // Strip markdown code block wrapper if present
+        let json_content = if content.starts_with("```json") && content.ends_with("```") {
+            content
+                .strip_prefix("```json")
+                .and_then(|s| s.strip_suffix("```"))
+                .map(|s| s.trim())
+                .unwrap_or(&content)
+        } else if content.starts_with("```") && content.ends_with("```") {
+            content
+                .strip_prefix("```")
+                .and_then(|s| s.strip_suffix("```"))
+                .map(|s| s.trim())
+                .unwrap_or(&content)
+        } else {
+            &content
+        };
+
+        let commit_message: CommitMessage = serde_json::from_str(json_content)
             .context("Failed to parse commit message from OpenAI response")?;
 
         Ok(commit_message)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a Rust-based Git commit tool that provides intelligent commit message generation using AI (OpenAI/Anthropic). The tool detects Git repositories, displays uncommitted changes, and can automatically generate structured commit messages following the Conventional Commits specification.
+Rust-based Git commit tool that generates intelligent, bilingual (Chinese/English) commit messages using AI providers (OpenAI/Anthropic/DeepSeek). Features automatic repository detection, diff visualization, and structured commit message generation following Conventional Commits specification.
 
 ## Build and Development Commands
 
@@ -17,10 +17,11 @@ cargo run
 
 # Run with specific command
 cargo run -- status              # Check repository status (default)
-cargo run -- diff                 # Show all changes
+cargo run -- diff                # Show all changes
 cargo run -- diff --staged        # Show staged changes only
 cargo run -- commit              # Generate AI commit message
 cargo run -- commit --show-diff  # Show diff preview before generation
+cargo run -- commit --debug      # Debug mode - shows AI raw response
 cargo run -- init                # Initialize config file in ~/.config/rust-commit/
 cargo run -- init --local        # Initialize config file in current directory
 
@@ -34,125 +35,111 @@ cargo fix                         # Auto-fix warnings
 cargo install --path .
 ```
 
-## Architecture and Module Structure
+## High-Level Architecture
 
-### Core Modules
+### Command Flow Pipeline
+1. **CLI Parsing** (`src/cli.rs`) → Parses command-line arguments using clap
+2. **Main Dispatch** (`src/main.rs`) → Routes to appropriate command handler
+3. **Git Operations** (`src/git.rs`) → Interacts with git repository via git2
+4. **AI Generation** (`src/ai/`) → Sends prompts to AI providers for commit messages
+5. **User Interface** (`src/ui.rs`) → Handles interactive prompts and formatting
+6. **Configuration** (`src/config.rs`) → Manages API keys and settings
 
-1. **`src/main.rs`** - Entry point and command orchestration
-   - Handles command dispatch to `handle_status_command`, `handle_diff_command`, `handle_commit_command`, `handle_init_command`
-   - Init command doesn't require git repository (handled before repo check)
-   - Manages the overall flow and error handling
+### Module Responsibilities
 
-2. **`src/git.rs`** - Git operations abstraction
-   - `GitRepo` struct wraps `git2::Repository`
-   - Key methods: `get_status()`, `get_diff()`, `get_combined_diff()`, `get_branch_info()`
-   - Handles unborn branch edge cases (repositories without commits)
+**`src/main.rs`**
+- Entry point with command orchestration
+- Special handling: `init` command bypasses git repo check
+- Command handlers: `handle_status_command`, `handle_diff_command`, `handle_commit_command`, `handle_init_command`
 
-3. **`src/ai/mod.rs`** - AI integration hub
-   - Defines `AIClient` enum that dispatches to specific providers
-   - `CommitMessage` struct with `format_conventional()` method
-   - `build_prompt()` constructs the prompt with diff context
-   - Provider switching handled via enum pattern (not trait objects due to async limitations)
+**`src/git.rs`** 
+- `GitRepo` wrapper around `git2::Repository`
+- Key methods: `get_status()`, `get_diff()`, `get_combined_diff()`, `get_branch_info()`
+- Edge case handling: unborn branches (new repos without commits)
 
-4. **`src/cli.rs`** - Command-line interface definition
-   - Uses `clap` derive macros for argument parsing
-   - Defines `Commands` enum: Status, Commit, Diff, Init
-   - Commit command includes AI-specific flags (api_key, model, auto, show_diff)
-   - Init command includes --local and --force flags
+**`src/ai/mod.rs`**
+- `AIClient` enum dispatches to providers (enum pattern due to async trait limitations)
+- `CommitMessage` struct with bilingual support (Chinese/English)
+- `build_prompt()` generates bilingual commit request
+- Custom deserializers handle various response formats
 
-5. **`src/ui.rs`** - Interactive user interface
-   - `CommitUI` provides methods for user interaction
-   - `confirm_commit()` presents generated message with options (Accept/Edit/Regenerate/Cancel)
-   - Uses `dialoguer` for interactive prompts and `colored` for terminal colors
+**`src/ai/openai.rs` & `src/ai/anthropic.rs`**
+- Provider-specific HTTP clients
+- Debug mode support for troubleshooting API responses
+- Flexible parsing: handles both string and array body formats
+- `breaking_change` field accepts boolean or string values
 
-6. **`src/config.rs`** - Configuration management
-   - Loads from `.rust-commit.toml` in multiple locations (current dir, ~/.config/, home)
-   - `Config` struct with nested `AIConfig` and `CommitConfig`
-   - API key resolution: config file → environment variable → interactive prompt
-   - `Config::init()` creates config file with detailed comments
-   - Auto-creates parent directories if needed
+**`src/cli.rs`**
+- Command definitions with clap derive macros
+- Commands: Status, Commit (with --debug flag), Diff, Init
+- Model parameter is optional (falls back to config)
 
-### AI Provider Implementation
+**`src/config.rs`**
+- Config file lookup order: `./.rust-commit.toml` → `~/.config/rust-commit/config.toml` → `~/.rust-commit.toml`
+- API key resolution: CLI arg → config file → env var → interactive prompt
+- Supports custom base URLs for API proxies or alternative endpoints
 
-Both AI providers (`src/ai/openai.rs` and `src/ai/anthropic.rs`) follow the same pattern:
-- Implement `generate_commit_message()` method
-- Build HTTP request with provider-specific headers
-- Parse JSON response to extract `CommitMessage` fields
-- Anthropic requires JSON extraction from potentially wrapped response
+## Bilingual Commit Message Format
 
-### Key Design Decisions
+The tool generates commit messages in Chinese/English bilingual format:
 
-1. **Enum-based AI dispatch** instead of trait objects due to async trait limitations
-2. **Unborn branch handling** in git operations to support new repositories
-3. **Multiple config file locations** for flexibility (project-local vs user-global)
-4. **Staged vs unstaged diff separation** in the combined diff output
-5. **Interactive confirmation flow** with edit capability before committing
+```
+type(scope): 中文简要描述
+English brief description
+
+中文详细说明第一点
+English explanation point 1
+中文详细说明第二点
+English explanation point 2
+```
+
+### CommitMessage Structure
+- `description`: Chinese summary
+- `description_en`: English translation
+- `body`: Array of Chinese explanations
+- `body_en`: Array of English translations
+- Flexible deserialization handles both legacy string and new array formats
 
 ## Configuration
 
-The tool looks for `.rust-commit.toml` in these locations (first found wins):
-1. Current directory
-2. `~/.config/rust-commit/config.toml`
-3. `~/.rust-commit.toml`
+### API Key Setup Priority
+1. Command-line: `--api-key YOUR_KEY`
+2. Config file: `api_key = "your-key"` in `.rust-commit.toml`
+3. Environment: `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
+4. Interactive prompt (fallback)
 
-### API Key Configuration (Priority Order)
+### Config File Fields
+- `api_key_env`: Name of environment variable to check (e.g., "OPENAI_API_KEY")
+- `api_key`: Direct API key (use `api_key_env` for security)
+- `base_url`: Custom API endpoint (for proxies/alternative services)
+- `model`: AI model to use (can be overridden with --model flag)
 
-1. **Command line argument** (highest priority)
-   ```bash
-   rust-commit commit --api-key YOUR_API_KEY
-   ```
+## Debug Features
 
-2. **Environment variable** (recommended)
-   ```bash
-   # For OpenAI
-   export OPENAI_API_KEY="your-api-key"
-   
-   # For Anthropic
-   export ANTHROPIC_API_KEY="your-api-key"
-   ```
-
-3. **Configuration file** (not recommended for security)
-   ```toml
-   [ai]
-   provider = "openai"  # or "anthropic"
-   model = "gpt-4"
-   api_key_env = "OPENAI_API_KEY"  # which env var to check
-   # api_key = "your-key"  # direct key (avoid this)
-   ```
-
-4. **Interactive prompt** (fallback)
-   - If no API key is found, the tool will prompt you to enter one
-
-### Example Configuration File
-
-Create `.rust-commit.toml` in your project root or home directory:
-
-```toml
-[ai]
-provider = "openai"  # or "anthropic"
-model = "gpt-4"      # or "gpt-3.5-turbo", "claude-3-opus", etc.
-api_key_env = "OPENAI_API_KEY"
-
-[commit]
-format = "conventional"
-include_emoji = false
-max_diff_size = 4000
-auto_stage = false
+Use `--debug` flag to troubleshoot AI responses:
+```bash
+rust-commit commit --debug
 ```
+
+Shows:
+- Raw HTTP response from API
+- Extracted message content before JSON parsing
+- Helps identify format mismatches or API issues
 
 ## Error Handling Patterns
 
-- Uses `anyhow::Result` throughout for error propagation
-- Git operations handle `UnbornBranch` error code specifically
-- API errors display full response text for debugging
-- File operations use `.context()` for better error messages
+- `anyhow::Result` for error propagation with context
+- Special handling for `UnbornBranch` in new repositories
+- Debug mode displays full API responses for troubleshooting
+- Null-safe parsing for optional API response fields
 
-## Commit Message Generation Flow
+## Commit Generation Flow
 
-1. Check for uncommitted changes via `GitRepo::get_status()`
-2. Gather diff content with `get_combined_diff()` (both staged and unstaged)
-3. Build context with branch name, file count, lines added/removed
-4. Send to AI provider with structured prompt requesting JSON response
-5. Parse response into `CommitMessage` struct
-6. Present to user with interactive options
-7. Execute commit via `git add .` and `git commit -m`
+1. Check repository status (`GitRepo::get_status()`)
+2. Generate combined diff (staged + unstaged changes)
+3. Build commit context (branch, file count, line changes)
+4. Send bilingual prompt to AI provider
+5. Parse response with flexible deserializers
+6. Format as bilingual commit message
+7. Present interactive options (Accept/Edit/Regenerate/Cancel)
+8. Execute commit via `git add .` and `git commit -m`
