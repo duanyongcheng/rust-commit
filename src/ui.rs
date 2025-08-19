@@ -48,7 +48,7 @@ impl CommitUI {
         println!("\n{}", "Diff Preview:".bold().yellow());
         println!("{}", "─".repeat(50));
 
-        for (_i, line) in lines.iter().take(max_lines).enumerate() {
+        for line in lines.iter().take(max_lines) {
             let colored_line = if line.starts_with('+') && !line.starts_with("+++") {
                 line.green()
             } else if line.starts_with('-') && !line.starts_with("---") {

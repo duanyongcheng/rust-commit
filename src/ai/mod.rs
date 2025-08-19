@@ -79,7 +79,7 @@ impl CommitMessage {
         }
         message.push_str(": ");
         message.push_str(&self.description);
-        message.push_str("\n");
+        message.push('\n');
         message.push_str(&self.description_en);
 
         // Body - 双语格式
@@ -90,10 +90,10 @@ impl CommitMessage {
                     // 不是第一条，不需要额外空行
                 }
                 message.push_str(zh);
-                message.push_str("\n");
+                message.push('\n');
                 message.push_str(en);
                 if i < body_zh.len() - 1 {
-                    message.push_str("\n");
+                    message.push('\n');
                 }
             }
         }

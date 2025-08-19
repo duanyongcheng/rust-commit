@@ -169,9 +169,8 @@ fn handle_status_command(repo: GitRepo, verbose: bool) -> Result<()> {
     if let Some(name) = branch_info.name {
         if name == "unborn" {
             println!(
-                "{}: {}",
-                "Branch".yellow().bold(),
-                "No commits yet (unborn branch)"
+                "{}: No commits yet (unborn branch)",
+                "Branch".yellow().bold()
             );
         } else {
             println!("{}: {}", "Current branch".bold(), name.cyan());
@@ -193,7 +192,7 @@ fn handle_status_command(repo: GitRepo, verbose: bool) -> Result<()> {
             }
         }
     } else if branch_info.is_detached {
-        println!("{}: {}", "HEAD state".yellow().bold(), "detached");
+        println!("{}: detached", "HEAD state".yellow().bold());
     }
 
     Ok(())
@@ -314,13 +313,13 @@ async fn handle_commit_command(
 fn execute_commit(message: &str) -> Result<()> {
     // First, stage all changes
     Command::new("git")
-        .args(&["add", "."])
+        .args(["add", "."])
         .output()
         .context("Failed to stage changes")?;
 
     // Then commit with the message
     let output = Command::new("git")
-        .args(&["commit", "-m", message])
+        .args(["commit", "-m", message])
         .output()
         .context("Failed to execute git commit")?;
 
