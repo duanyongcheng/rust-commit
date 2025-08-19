@@ -61,17 +61,19 @@ impl OpenAIClient {
             anyhow::bail!("OpenAI API error: {}", error_text);
         }
 
-        let response_text = response.text().await
+        let response_text = response
+            .text()
+            .await
             .context("Failed to read response text")?;
-        
+
         if debug {
             println!("\n{}", "=== DEBUG: Raw HTTP Response ===".cyan().bold());
             println!("{}", response_text);
             println!("{}", "=================================\n".cyan().bold());
         }
-        
-        let api_response: OpenAIResponse = serde_json::from_str(&response_text)
-            .context("Failed to parse OpenAI response")?;
+
+        let api_response: OpenAIResponse =
+            serde_json::from_str(&response_text).context("Failed to parse OpenAI response")?;
 
         let content = api_response
             .choices
@@ -147,4 +149,3 @@ struct Choice {
 struct ResponseMessage {
     content: Option<String>,
 }
-

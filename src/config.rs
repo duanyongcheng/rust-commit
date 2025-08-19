@@ -58,7 +58,7 @@ impl Config {
                 .map(|p| p.join(".rust-commit.toml"))
                 .unwrap_or_default(),
         ];
-        
+
         for path in config_paths {
             if path.exists() {
                 let content = fs::read_to_string(&path)
@@ -68,21 +68,21 @@ impl Config {
                 return Ok(config);
             }
         }
-        
+
         // Return default if no config file found
         Ok(Self::default())
     }
-    
+
     pub fn get_api_key(&self) -> Option<String> {
         // First check if api_key is directly set
         if let Some(key) = &self.ai.api_key {
             return Some(key.clone());
         }
-        
+
         // Then check environment variable
         std::env::var(&self.ai.api_key_env).ok()
     }
-    
+
     pub fn init(local: bool, force: bool) -> Result<PathBuf> {
         let path = if local {
             PathBuf::from(".rust-commit.toml")
@@ -92,7 +92,7 @@ impl Config {
                 .map(|p| p.join(".config/rust-commit/config.toml"))
                 .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?
         };
-        
+
         // Check if file already exists
         if path.exists() && !force {
             anyhow::bail!(
@@ -100,7 +100,7 @@ impl Config {
                 path
             );
         }
-        
+
         // Create default config with helpful comments
         let config_content = r#"# Rust Commit Configuration File
 # This file configures the rust-commit tool for AI-powered commit message generation
@@ -145,7 +145,7 @@ max_diff_size = 4000
 # Whether to automatically stage all changes before committing
 auto_stage = false
 "#;
-        
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = path.parent() {
             if !parent.exists() {
@@ -153,11 +153,11 @@ auto_stage = false
                     .context(format!("Failed to create directory {:?}", parent))?;
             }
         }
-        
+
         // Write config file
         fs::write(&path, config_content)
             .context(format!("Failed to write config to {:?}", path))?;
-        
+
         Ok(path)
     }
 }

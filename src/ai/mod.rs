@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub mod openai;
 pub mod anthropic;
+pub mod openai;
 
 #[derive(Debug, Clone)]
 pub struct CommitContext {
@@ -19,11 +19,11 @@ pub struct CommitMessage {
     pub scope: Option<String>,
     pub description: String,
     #[serde(default)]
-    pub description_en: String,  // 英文描述
+    pub description_en: String, // 英文描述
     #[serde(deserialize_with = "deserialize_body", default)]
-    pub body: Option<Vec<String>>,  // 改为数组，每个元素是一条说明
+    pub body: Option<Vec<String>>, // 改为数组，每个元素是一条说明
     #[serde(default)]
-    pub body_en: Option<Vec<String>>,  // 英文说明
+    pub body_en: Option<Vec<String>>, // 英文说明
     #[serde(deserialize_with = "deserialize_breaking_change")]
     pub breaking_change: Option<String>,
 }
@@ -39,7 +39,7 @@ where
         Array(Vec<String>),
         Null,
     }
-    
+
     match Body::deserialize(deserializer) {
         Ok(Body::String(s)) => Ok(Some(vec![s])),
         Ok(Body::Array(arr)) => Ok(Some(arr)),
@@ -59,7 +59,7 @@ where
         String(String),
         Null,
     }
-    
+
     match BreakingChange::deserialize(deserializer) {
         Ok(BreakingChange::Bool(false)) | Ok(BreakingChange::Null) => Ok(None),
         Ok(BreakingChange::Bool(true)) => Ok(Some("Breaking change".to_string())),
@@ -71,7 +71,7 @@ where
 impl CommitMessage {
     pub fn format_conventional(&self) -> String {
         let mut message = String::new();
-        
+
         // Header: type(scope): 中文描述
         message.push_str(&self.commit_type);
         if let Some(scope) = &self.scope {
@@ -81,7 +81,7 @@ impl CommitMessage {
         message.push_str(&self.description);
         message.push_str("\n");
         message.push_str(&self.description_en);
-        
+
         // Body - 双语格式
         if let (Some(body_zh), Some(body_en)) = (&self.body, &self.body_en) {
             message.push_str("\n\n");
@@ -97,14 +97,14 @@ impl CommitMessage {
                 }
             }
         }
-        
+
         // Breaking change
         if let Some(breaking) = &self.breaking_change {
             message.push_str("\n\n");
             message.push_str("BREAKING CHANGE: ");
             message.push_str(breaking);
         }
-        
+
         message
     }
 }
@@ -115,18 +115,34 @@ pub enum AIClient {
 }
 
 impl AIClient {
-    pub async fn generate_commit_message(&self, diff: &str, context: &CommitContext, debug: bool) -> Result<CommitMessage> {
+    pub async fn generate_commit_message(
+        &self,
+        diff: &str,
+        context: &CommitContext,
+        debug: bool,
+    ) -> Result<CommitMessage> {
         match self {
             AIClient::OpenAI(client) => client.generate_commit_message(diff, context, debug).await,
-            AIClient::Anthropic(client) => client.generate_commit_message(diff, context, debug).await,
+            AIClient::Anthropic(client) => {
+                client.generate_commit_message(diff, context, debug).await
+            }
         }
     }
 }
 
-pub fn create_client(provider: &str, api_key: String, model: String, base_url: Option<String>) -> Result<AIClient> {
+pub fn create_client(
+    provider: &str,
+    api_key: String,
+    model: String,
+    base_url: Option<String>,
+) -> Result<AIClient> {
     match provider.to_lowercase().as_str() {
-        "openai" => Ok(AIClient::OpenAI(openai::OpenAIClient::new(api_key, model, base_url))),
-        "anthropic" => Ok(AIClient::Anthropic(anthropic::AnthropicClient::new(api_key, model, base_url))),
+        "openai" => Ok(AIClient::OpenAI(openai::OpenAIClient::new(
+            api_key, model, base_url,
+        ))),
+        "anthropic" => Ok(AIClient::Anthropic(anthropic::AnthropicClient::new(
+            api_key, model, base_url,
+        ))),
         _ => anyhow::bail!("Unsupported AI provider: {}", provider),
     }
 }

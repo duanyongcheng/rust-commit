@@ -7,8 +7,7 @@ pub struct GitRepo {
 
 impl GitRepo {
     pub fn open(path: &std::path::Path) -> Result<Self> {
-        let repo = Repository::open(path)
-            .context("Failed to open repository")?;
+        let repo = Repository::open(path).context("Failed to open repository")?;
         Ok(Self { repo })
     }
 
@@ -16,19 +15,21 @@ impl GitRepo {
         let mut status_opts = StatusOptions::new();
         status_opts.include_untracked(true);
         status_opts.include_ignored(false);
-        
-        let statuses = self.repo.statuses(Some(&mut status_opts))
+
+        let statuses = self
+            .repo
+            .statuses(Some(&mut status_opts))
             .context("Failed to get repository status")?;
-        
+
         let mut modified_files = Vec::new();
         let mut new_files = Vec::new();
         let mut deleted_files = Vec::new();
         let mut renamed_files = Vec::new();
-        
+
         for entry in statuses.iter() {
             let status = entry.status();
             let path = entry.path().unwrap_or("unknown").to_string();
-            
+
             if status.is_wt_modified() || status.is_index_modified() {
                 modified_files.push(path);
             } else if status.is_wt_new() || status.is_index_new() {
@@ -39,7 +40,7 @@ impl GitRepo {
                 renamed_files.push(path);
             }
         }
-        
+
         Ok(GitStatus {
             is_clean: statuses.is_empty(),
             modified_files,
@@ -54,8 +55,10 @@ impl GitRepo {
             Ok(head) => {
                 if head.is_branch() {
                     let branch_name = head.shorthand().unwrap_or("unknown").to_string();
-                    
-                    let tracking_info = if let Ok(upstream) = self.repo.branch_upstream_name(head.name().unwrap()) {
+
+                    let tracking_info = if let Ok(upstream) =
+                        self.repo.branch_upstream_name(head.name().unwrap())
+                    {
                         let upstream_str = upstream.as_str().unwrap_or("unknown");
                         let (ahead, behind) = self.repo.graph_ahead_behind(
                             head.target().unwrap(),
@@ -69,7 +72,7 @@ impl GitRepo {
                     } else {
                         None
                     };
-                    
+
                     Ok(BranchInfo {
                         name: Some(branch_name),
                         is_detached: false,
@@ -100,7 +103,7 @@ impl GitRepo {
     pub fn get_diff(&self, staged: bool) -> Result<String> {
         let mut diff_opts = DiffOptions::new();
         diff_opts.include_untracked(true);
-        
+
         let diff = if staged {
             // Get staged changes (index vs HEAD)
             match self.repo.head() {
@@ -108,21 +111,27 @@ impl GitRepo {
                     let tree = head.peel_to_tree()?;
                     let mut index = self.repo.index()?;
                     let index_tree = self.repo.find_tree(index.write_tree()?)?;
-                    self.repo.diff_tree_to_tree(Some(&tree), Some(&index_tree), Some(&mut diff_opts))?
+                    self.repo.diff_tree_to_tree(
+                        Some(&tree),
+                        Some(&index_tree),
+                        Some(&mut diff_opts),
+                    )?
                 }
                 Err(e) if e.code() == git2::ErrorCode::UnbornBranch => {
                     // No commits yet, compare index to empty tree
                     let mut index = self.repo.index()?;
                     let index_tree = self.repo.find_tree(index.write_tree()?)?;
-                    self.repo.diff_tree_to_tree(None, Some(&index_tree), Some(&mut diff_opts))?
+                    self.repo
+                        .diff_tree_to_tree(None, Some(&index_tree), Some(&mut diff_opts))?
                 }
                 Err(e) => return Err(e.into()),
             }
         } else {
             // Get unstaged changes (working directory vs index)
-            self.repo.diff_index_to_workdir(None, Some(&mut diff_opts))?
+            self.repo
+                .diff_index_to_workdir(None, Some(&mut diff_opts))?
         };
-        
+
         let mut diff_text = String::new();
         diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
             use git2::DiffLineType::*;
@@ -136,21 +145,21 @@ impl GitRepo {
             diff_text.push_str(&format!("{}{}", prefix, content));
             true
         })?;
-        
+
         Ok(diff_text)
     }
 
     pub fn get_combined_diff(&self) -> Result<String> {
         let staged = self.get_diff(true)?;
         let unstaged = self.get_diff(false)?;
-        
+
         let mut combined = String::new();
-        
+
         if !staged.is_empty() {
             combined.push_str("=== STAGED CHANGES ===\n\n");
             combined.push_str(&staged);
         }
-        
+
         if !unstaged.is_empty() {
             if !combined.is_empty() {
                 combined.push_str("\n\n");
@@ -158,7 +167,7 @@ impl GitRepo {
             combined.push_str("=== UNSTAGED CHANGES ===\n\n");
             combined.push_str(&unstaged);
         }
-        
+
         Ok(combined)
     }
 }
@@ -173,10 +182,10 @@ pub struct GitStatus {
 
 impl GitStatus {
     pub fn total_changes(&self) -> usize {
-        self.modified_files.len() + 
-        self.new_files.len() + 
-        self.deleted_files.len() + 
-        self.renamed_files.len()
+        self.modified_files.len()
+            + self.new_files.len()
+            + self.deleted_files.len()
+            + self.renamed_files.len()
     }
 }
 
