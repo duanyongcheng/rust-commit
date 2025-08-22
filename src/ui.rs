@@ -32,9 +32,18 @@ impl CommitUI {
             0 => Ok(CommitAction::Accept),
             1 => {
                 let edited = Editor::new()
-                    .edit(&message.format_conventional())?
-                    .unwrap_or_else(|| message.format_conventional());
-                Ok(CommitAction::Edit(edited))
+                    .edit(&message.format_conventional())?;
+                
+                match edited {
+                    Some(content) if !content.trim().is_empty() => {
+                        Ok(CommitAction::Edit(content))
+                    }
+                    Some(_) => {
+                        println!("{}", "Commit message cannot be empty!".red());
+                        Ok(CommitAction::Cancel)
+                    }
+                    None => Ok(CommitAction::Cancel)
+                }
             }
             2 => Ok(CommitAction::Regenerate),
             _ => Ok(CommitAction::Cancel),
@@ -75,12 +84,19 @@ impl CommitUI {
     }
 
     pub fn get_api_key(provider: &str) -> Result<String> {
+        use dialoguer::Password;
+        
         println!("\n{}", format!("{} API key not found!", provider).yellow());
-        println!("Please enter your {} API key:", provider);
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        Ok(input.trim().to_string())
+        
+        let api_key = Password::new()
+            .with_prompt(format!("Please enter your {} API key", provider))
+            .interact()?;
+        
+        if api_key.trim().is_empty() {
+            anyhow::bail!("API key cannot be empty");
+        }
+        
+        Ok(api_key.trim().to_string())
     }
 
     pub fn show_success(message: &str) {

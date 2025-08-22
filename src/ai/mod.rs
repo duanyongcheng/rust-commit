@@ -84,16 +84,30 @@ impl CommitMessage {
 
         // Body - 双语格式
         if let (Some(body_zh), Some(body_en)) = (&self.body, &self.body_en) {
-            message.push_str("\n\n");
-            for (i, (zh, en)) in body_zh.iter().zip(body_en.iter()).enumerate() {
-                if i > 0 {
-                    // 不是第一条，不需要额外空行
-                }
-                message.push_str(zh);
-                message.push('\n');
-                message.push_str(en);
-                if i < body_zh.len() - 1 {
-                    message.push('\n');
+            if !body_zh.is_empty() || !body_en.is_empty() {
+                message.push_str("\n\n");
+                
+                // 使用较长的数组长度，确保所有内容都被包含
+                let max_len = body_zh.len().max(body_en.len());
+                
+                for i in 0..max_len {
+                    if i > 0 {
+                        message.push('\n');
+                    }
+                    
+                    // 安全获取中文内容
+                    if let Some(zh) = body_zh.get(i) {
+                        message.push_str(zh);
+                        message.push('\n');
+                    }
+                    
+                    // 安全获取英文内容
+                    if let Some(en) = body_en.get(i) {
+                        message.push_str(en);
+                    } else if body_zh.get(i).is_some() {
+                        // 如果有中文但没有对应英文，添加占位符
+                        message.push_str("[Translation needed]");
+                    }
                 }
             }
         }
@@ -200,6 +214,11 @@ fn truncate_diff(diff: &str, max_chars: usize) -> &str {
     if diff.len() <= max_chars {
         diff
     } else {
-        &diff[..max_chars]
+        // Find the char boundary at or before max_chars
+        let mut boundary = max_chars;
+        while !diff.is_char_boundary(boundary) && boundary > 0 {
+            boundary -= 1;
+        }
+        &diff[..boundary]
     }
 }

@@ -2,6 +2,7 @@ use super::{build_prompt, CommitContext, CommitMessage};
 use anyhow::{Context, Result};
 use colored::*;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 pub struct OpenAIClient {
     api_key: String,
@@ -12,11 +13,17 @@ pub struct OpenAIClient {
 
 impl OpenAIClient {
     pub fn new(api_key: String, model: String, base_url: Option<String>) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .expect("Failed to create HTTP client");
+            
         Self {
             api_key,
             model,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
-            client: reqwest::Client::new(),
+            client,
         }
     }
 
@@ -57,8 +64,23 @@ impl OpenAIClient {
             .context("Failed to send request to OpenAI")?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await?;
-            anyhow::bail!("OpenAI API error: {}", error_text);
+            
+            // Sanitize error message to avoid exposing sensitive details
+            let safe_error = match status.as_u16() {
+                401 => "Authentication failed. Please check your API key.",
+                403 => "Access forbidden. Please check your API permissions.",
+                429 => "Rate limit exceeded. Please try again later.",
+                500..=599 => "OpenAI service error. Please try again later.",
+                _ => "Request failed. Please check your configuration.",
+            };
+            
+            if debug {
+                eprintln!("Debug: Full error response: {}", error_text);
+            }
+            
+            anyhow::bail!("{} (Status: {})", safe_error, status);
         }
 
         let response_text = response

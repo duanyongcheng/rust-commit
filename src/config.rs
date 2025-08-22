@@ -49,18 +49,16 @@ impl Default for Config {
 impl Config {
     pub fn load() -> Result<Self> {
         // Try to load from multiple locations
-        let config_paths = vec![
-            PathBuf::from(".rust-commit.toml"),
-            dirs::home_dir()
-                .map(|p| p.join(".config/rust-commit/config.toml"))
-                .unwrap_or_default(),
-            dirs::home_dir()
-                .map(|p| p.join(".rust-commit.toml"))
-                .unwrap_or_default(),
-        ];
+        let mut config_paths = vec![PathBuf::from(".rust-commit.toml")];
+        
+        // Only add home directory paths if home_dir is available
+        if let Some(home) = dirs::home_dir() {
+            config_paths.push(home.join(".config/rust-commit/config.toml"));
+            config_paths.push(home.join(".rust-commit.toml"));
+        }
 
         for path in config_paths {
-            if path.exists() {
+            if path.exists() && path.is_file() {
                 let content = fs::read_to_string(&path)
                     .context(format!("Failed to read config from {:?}", path))?;
                 let config: Config = toml::from_str(&content)
@@ -157,6 +155,17 @@ auto_stage = false
         // Write config file
         fs::write(&path, config_content)
             .context(format!("Failed to write config to {:?}", path))?;
+
+        // Set appropriate file permissions on Unix-like systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&path)?;
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o600); // Read/write for owner only
+            fs::set_permissions(&path, permissions)
+                .context("Failed to set config file permissions")?;
+        }
 
         Ok(path)
     }

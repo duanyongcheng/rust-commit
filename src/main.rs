@@ -235,8 +235,20 @@ async fn handle_commit_command(
         return Ok(());
     }
 
-    // Get diff
+    // Check for unstaged changes and prompt to stage
+    check_and_stage_changes()?;
+
+    // Get diff - this should now include staged changes
     let diff = repo.get_combined_diff()?;
+    
+    // Debug: Check if we're getting the staged diff correctly
+    if debug {
+        println!("Debug: Combined diff length: {}", diff.len());
+        if diff.len() > 100 {
+            println!("Debug: First 100 chars of diff: {}", &diff[..100]);
+        }
+    }
+    
     if diff.is_empty() {
         CommitUI::show_info("No changes detected");
         return Ok(());
@@ -310,22 +322,84 @@ async fn handle_commit_command(
     Ok(())
 }
 
-fn execute_commit(message: &str) -> Result<()> {
-    // First, stage all changes
-    Command::new("git")
-        .args(["add", "."])
+fn check_and_stage_changes() -> Result<()> {
+    use crate::ui::CommitUI;
+    use dialoguer::{theme::ColorfulTheme, Confirm};
+    
+    // Check if there are unstaged changes
+    let status_output = Command::new("git")
+        .args(["status", "--porcelain"])
         .output()
-        .context("Failed to stage changes")?;
+        .context("Failed to check git status")?;
+    
+    if status_output.status.success() {
+        let status = String::from_utf8_lossy(&status_output.stdout);
+        let has_unstaged = status.lines().any(|line| {
+            line.starts_with(" M") || line.starts_with("??") || line.starts_with(" D") || line.starts_with(" A")
+        });
+        
+        if has_unstaged {
+            println!("\n{}", "Unstaged changes detected:".yellow());
+            println!("{}", "─".repeat(50));
+            
+            // Show unstaged files
+            for line in status.lines() {
+                if line.starts_with(" M") {
+                    println!("  {} {}", "M".yellow(), &line[3..]);
+                } else if line.starts_with("??") {
+                    println!("  {} {}", "?".red(), &line[3..]);
+                } else if line.starts_with(" D") {
+                    println!("  {} {}", "D".red(), &line[3..]);
+                }
+            }
+            println!("{}", "─".repeat(50));
+            
+            let should_stage = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Do you want to stage all changes (git add .)?")
+                .default(true)
+                .interact()?;
+                
+            if should_stage {
+                let add_output = Command::new("git")
+                    .args(["add", "."])
+                    .output()
+                    .context("Failed to execute git add command")?;
 
-    // Then commit with the message
-    let output = Command::new("git")
+                if !add_output.status.success() {
+                    let error = String::from_utf8_lossy(&add_output.stderr);
+                    anyhow::bail!("Failed to stage changes: {}", error.trim());
+                }
+                
+                CommitUI::show_info("All changes staged successfully");
+            } else {
+                CommitUI::show_info("Proceeding with only currently staged changes");
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+fn execute_commit(message: &str) -> Result<()> {
+    // Execute git commit
+    let commit_output = Command::new("git")
         .args(["commit", "-m", message])
         .output()
-        .context("Failed to execute git commit")?;
+        .context("Failed to execute git commit command")?;
 
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Git commit failed: {}", error);
+    if !commit_output.status.success() {
+        let error = String::from_utf8_lossy(&commit_output.stderr);
+        
+        // Check for common git errors and provide helpful messages
+        let error_msg = if error.contains("nothing to commit") {
+            "No changes to commit. All changes may already be committed."
+        } else if error.contains("Please tell me who you are") {
+            "Git user not configured. Please run:\n  git config --global user.email \"you@example.com\"\n  git config --global user.name \"Your Name\""
+        } else {
+            error.trim()
+        };
+        
+        anyhow::bail!("Git commit failed: {}", error_msg);
     }
 
     Ok(())

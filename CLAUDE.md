@@ -51,6 +51,7 @@ cargo install --path .
 - Entry point with command orchestration
 - Special handling: `init` command bypasses git repo check
 - Command handlers: `handle_status_command`, `handle_diff_command`, `handle_commit_command`, `handle_init_command`
+- Enhanced `execute_commit`: Now prompts user before staging unstaged changes
 
 **`src/git.rs`** 
 - `GitRepo` wrapper around `git2::Repository`
@@ -78,6 +79,13 @@ cargo install --path .
 - Config file lookup order: `./.rust-commit.toml` → `~/.config/rust-commit/config.toml` → `~/.rust-commit.toml`
 - API key resolution: CLI arg → config file → env var → interactive prompt
 - Supports custom base URLs for API proxies or alternative endpoints
+
+**`src/ui.rs`**
+- `CommitUI` struct provides all user interaction methods
+- Interactive prompts using `dialoguer` crate
+- Color-coded diff preview with line limits
+- Commit action selection (Accept/Edit/Regenerate/Cancel)
+- API key input handling (Note: currently shows plaintext)
 
 ## Bilingual Commit Message Format
 
@@ -142,4 +150,21 @@ Shows:
 5. Parse response with flexible deserializers
 6. Format as bilingual commit message
 7. Present interactive options (Accept/Edit/Regenerate/Cancel)
-8. Execute commit via `git add .` and `git commit -m`
+8. **NEW**: Check for unstaged changes and prompt user to stage them
+9. Execute commit via `git commit -m` (with optional `git add .` based on user choice)
+
+## Known Issues and Considerations
+
+### Potential Bugs to Address
+1. **Path handling**: Config path resolution may fail when `home_dir()` returns `None`
+2. **JSON parsing**: Anthropic client's simple string slicing for JSON extraction is fragile
+3. **Security**: API keys entered via stdin are shown in plaintext
+4. **HTTP timeouts**: No timeout configured for API requests
+5. **Error messages**: API errors may expose sensitive information
+6. **File permissions**: Config files containing API keys lack proper permission settings
+
+### Best Practices
+- Always use environment variables for API keys instead of config files
+- Review generated commit messages before accepting
+- Use `--debug` flag when encountering API issues
+- Keep diff size reasonable (default max: 4000 chars) for better AI responses
