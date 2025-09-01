@@ -18,7 +18,7 @@ impl OpenAIClient {
             .connect_timeout(Duration::from_secs(10))
             .build()
             .expect("Failed to create HTTP client");
-            
+
         Self {
             api_key,
             model,
@@ -66,7 +66,7 @@ impl OpenAIClient {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await?;
-            
+
             // Sanitize error message to avoid exposing sensitive details
             let safe_error = match status.as_u16() {
                 401 => "Authentication failed. Please check your API key.",
@@ -75,11 +75,11 @@ impl OpenAIClient {
                 500..=599 => "OpenAI service error. Please try again later.",
                 _ => "Request failed. Please check your configuration.",
             };
-            
+
             if debug {
                 eprintln!("Debug: Full error response: {}", error_text);
             }
-            
+
             anyhow::bail!("{} (Status: {})", safe_error, status);
         }
 

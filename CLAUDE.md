@@ -25,25 +25,46 @@ cargo run -- commit --debug      # Debug mode - shows AI raw response
 cargo run -- init                # Initialize config file in ~/.config/rust-commit/
 cargo run -- init --local        # Initialize config file in current directory
 
-# Testing and Quality
-cargo test                        # Run tests
-cargo fmt                         # Format code
-cargo clippy                      # Run linter
-cargo fix                         # Auto-fix warnings
+# Run specific tests and checks
+cargo test                        # Run all tests
+cargo test test_commit_message    # Run specific test
 
-# Install binary locally
-cargo install --path .
+# Code quality
+rustup component add clippy       # Install clippy if missing
+rustup component add rustfmt      # Install rustfmt if missing
+cargo fmt                         # Format all code
+cargo clippy -- -D warnings       # Run linter with warnings as errors
+cargo clippy --fix                # Auto-fix clippy warnings
+cargo fix --allow-dirty --allow-staged  # Auto-fix compiler warnings
+
+# Build for distribution
+cargo build --release               # Production optimized build
+target/release/rust-commit --help   # Test release binary
+
+# Install globally
+cargo install --path .             # Install from local source
+cargo install rust-commit          # Install from crates.io (if published)
+
+# Development workflow example
+make test                          # Run all tests, fmt, and clippy
+make check                        # Check syntax without building
 ```
 
 ## High-Level Architecture
 
 ### Command Flow Pipeline
-1. **CLI Parsing** (`src/cli.rs`) → Parses command-line arguments using clap
-2. **Main Dispatch** (`src/main.rs`) → Routes to appropriate command handler
-3. **Git Operations** (`src/git.rs`) → Interacts with git repository via git2
-4. **AI Generation** (`src/ai/`) → Sends prompts to AI providers for commit messages
-5. **User Interface** (`src/ui.rs`) → Handles interactive prompts and formatting
-6. **Configuration** (`src/config.rs`) → Manages API keys and settings
+1. **CLI Parsing** (`src/cli.rs:7-58`) → Parses command-line arguments using clap with derive macros
+2. **Main Dispatch** (`src/main.rs:44-73`) → Routes to appropriate command handler using match on Commands enum
+3. **Git Operations** (`src/git.rs`) → Interacts with git repository via git2 crate
+4. **AI Generation** (`src/ai/mod.rs`) → Sends prompts to AI providers (OpenAI/Anthropic/DeepSeek) via HTTP
+5. **User Interface** (`src/ui.rs`) → Interactive prompts with dialoguer crate, color-coded output
+6. **Configuration** (`src/config.rs`) → TOML config files with hierarchical lookup strategy
+
+### Key Data Structures
+- `AIClient` enum (`src/ai/mod.rs`) - Provider dispatch pattern
+- `CommitMessage` struct (`src/ai/mod.rs`) - Bilingual commit messages
+- `GitRepo` wrapper (`src/git.rs`) - Safe git operations
+- `Args` struct (`src/cli.rs`) - Command-line argument parsing
 
 ### Module Responsibilities
 
@@ -153,6 +174,15 @@ Shows:
 8. **NEW**: Check for unstaged changes and prompt user to stage them
 9. Execute commit via `git commit -m` (with optional `git add .` based on user choice)
 
+## CI/CD Pipeline
+
+### GitHub Actions Workflow (`.github/workflows/rust.yml`)
+- **Test Matrix**: Builds and tests on Linux, Windows, macOS with Rust stable/beta/nightly
+- **Quality Gates**: Format check (cargo fmt), linting (cargo clippy with warnings as errors)
+- **Release Builds**: Automated release binaries for multiple platforms on tag push
+- **Security Audit**: Automatic dependency vulnerability scanning
+- **MSRV**: Implicit minimum supported Rust version based on dependencies
+
 ## Known Issues and Considerations
 
 ### Potential Bugs to Address
@@ -163,8 +193,21 @@ Shows:
 5. **Error messages**: API errors may expose sensitive information
 6. **File permissions**: Config files containing API keys lack proper permission settings
 
+### Testing Infrastructure
+- Unit tests in `src/` directory (use `cargo test` to run)
+- Integration tests in `tests/` directory (if created later)
+- CI builds for all supported platforms
+- Example: `cargo test test_commit_message` for specific test module
+
+### Development Workflow
+1. Run `cargo fmt && cargo clippy -- -D warnings` before committing
+2. Use `cargo test` to ensure all tests pass
+3. Use `cargo run -- commit --debug` to troubleshoot AI issues
+4. Test cross-platform with `cargo build --release` on target systems
+
 ### Best Practices
 - Always use environment variables for API keys instead of config files
 - Review generated commit messages before accepting
-- Use `--debug` flag when encountering API issues
+- Use `--debug` flag when encountering API issues (`cargo run -- commit --debug`)
 - Keep diff size reasonable (default max: 4000 chars) for better AI responses
+- Monitor AI provider rate limits and adjust diff size accordingly

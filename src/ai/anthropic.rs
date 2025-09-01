@@ -18,7 +18,7 @@ impl AnthropicClient {
             .connect_timeout(Duration::from_secs(10))
             .build()
             .expect("Failed to create HTTP client");
-            
+
         Self {
             api_key,
             model,
@@ -61,7 +61,7 @@ impl AnthropicClient {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await?;
-            
+
             // Sanitize error message to avoid exposing sensitive details
             let safe_error = match status.as_u16() {
                 401 => "Authentication failed. Please check your API key.",
@@ -70,11 +70,11 @@ impl AnthropicClient {
                 500..=599 => "Anthropic service error. Please try again later.",
                 _ => "Request failed. Please check your configuration.",
             };
-            
+
             if debug {
                 eprintln!("Debug: Full error response: {}", error_text);
             }
-            
+
             anyhow::bail!("{} (Status: {})", safe_error, status);
         }
 
@@ -89,8 +89,8 @@ impl AnthropicClient {
             println!("{}", "=================================\n".cyan().bold());
         }
 
-        let api_response: AnthropicResponse = serde_json::from_str(&response_text)
-            .context("Failed to parse Anthropic response")?;
+        let api_response: AnthropicResponse =
+            serde_json::from_str(&response_text).context("Failed to parse Anthropic response")?;
 
         let content = api_response
             .content
@@ -131,7 +131,7 @@ impl AnthropicClient {
                 let mut depth = 0;
                 let mut start_idx = None;
                 let mut end_idx = None;
-                
+
                 for (idx, ch) in clean_content.char_indices() {
                     match ch {
                         '{' => {
@@ -150,7 +150,7 @@ impl AnthropicClient {
                         _ => {}
                     }
                 }
-                
+
                 if let (Some(start), Some(end)) = (start_idx, end_idx) {
                     let json_str = &clean_content[start..end];
                     serde_json::from_str(json_str)

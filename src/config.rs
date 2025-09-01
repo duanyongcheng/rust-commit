@@ -50,7 +50,7 @@ impl Config {
     pub fn load() -> Result<Self> {
         // Try to load from multiple locations
         let mut config_paths = vec![PathBuf::from(".rust-commit.toml")];
-        
+
         // Only add home directory paths if home_dir is available
         if let Some(home) = dirs::home_dir() {
             config_paths.push(home.join(".config/rust-commit/config.toml"));
