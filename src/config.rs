@@ -31,7 +31,7 @@ impl Default for Config {
         Self {
             ai: AIConfig {
                 provider: "openai".to_string(),
-                model: "gpt-4".to_string(),
+                model: "gpt-4.1".to_string(),
                 api_key_env: "OPENAI_API_KEY".to_string(),
                 api_key: None,
                 base_url: None,
@@ -39,7 +39,7 @@ impl Default for Config {
             commit: CommitConfig {
                 format: "conventional".to_string(),
                 include_emoji: false,
-                max_diff_size: 4000,
+                max_diff_size: 10000,
                 auto_stage: false,
             },
         }
